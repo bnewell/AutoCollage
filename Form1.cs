@@ -14,6 +14,7 @@ namespace AutoCollage
 {
     public partial class Form1 : Form
     {
+        // [pic name, path]
         private Dictionary<String, String> currentPics = new Dictionary<String, String>();
         private static Random random = new Random();
 
@@ -205,14 +206,20 @@ namespace AutoCollage
         {
             string targetExtension = System.IO.Path.GetExtension(fileName);
             if (String.IsNullOrEmpty(targetExtension))
+            {
                 return false;
+            }
             else
+            {
                 targetExtension = "*" + targetExtension.ToLowerInvariant();
+            }
 
             List<string> recognisedImageExtensions = new List<string>();
 
             foreach (System.Drawing.Imaging.ImageCodecInfo imageCodec in System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders())
+            {
                 recognisedImageExtensions.AddRange(imageCodec.FilenameExtension.ToLowerInvariant().Split(";".ToCharArray()));
+            }
 
             foreach (string extension in recognisedImageExtensions)
             {
@@ -264,7 +271,6 @@ namespace AutoCollage
 
         private void backgroundWorker1_DoWork(object sender, DoWorkEventArgs e)
         {
-            // get save directory
             int collageCount = CollagePreferences.count;
 
             List<String> newCollageHashes = new List<String>();
@@ -294,6 +300,7 @@ namespace AutoCollage
                 attemptsToCreateUniqueCollage = 0;
                 newCollageHashes.Add(imageHash);
 
+                // collageName = cN-[WxH].jpg
                 var collageName = "c" + imageCount++ + "-[" + newCollage.Width + "x" +
                     newCollage.Height + "].jpg";
 
@@ -326,131 +333,11 @@ namespace AutoCollage
 
         private Bitmap createCollage()
         {
-            var root = createTree();
-            root.printTree();
-
-            List<Dictionary<String, String>> imagesInfo = root.getImageInfoFromTree();
-
-            var newCollage = new Bitmap(root.Width, root.Height, PixelFormat.Format24bppRgb);
-            var canvas = Graphics.FromImage(newCollage);
-
-            // add individual images to newe collage
-            for (var i = 0; i < imagesInfo.Count; i++)
-            {
-                // add collage size to images info to determine border size
-                imagesInfo[i].Add("collageWidth", root.Width.ToString());
-                imagesInfo[i].Add("collageHeight", root.Height.ToString());
-
-                var imagePath = imagesInfo[i]["path"];
-                var image = Image.FromFile(imagePath);
-                var width = Convert.ToInt32(imagesInfo[i]["width"]);
-                var height = Convert.ToInt32(imagesInfo[i]["height"]);
-                var x = Convert.ToInt32(imagesInfo[i]["x"]);
-                var y = Convert.ToInt32(imagesInfo[i]["y"]);
-
-                canvas.DrawImage(image, x, y, width, height);
-
-                if (CollagePreferences.borderWidth > 0)
-                {
-                    // get border size for each image
-                    // if a side is external, full "border width"
-                    // otherwise half the border, since it's sharing a border with another image
-                    Dictionary<String, double> borderWidths = determineBorderWidth(imagesInfo[i]);
-                    var color = CollagePreferences.borderColor;
-
-                    // top border
-                    Pen borderLine = new Pen(color, (float)borderWidths["top"]);
-                    canvas.DrawLine(borderLine, x, y, x + width, y);
-
-                    // bottom border
-                    borderLine = new Pen(color, (float)borderWidths["bottom"]);
-                    canvas.DrawLine(borderLine, x, y + height, x + width, y + height);
-
-                    // left border
-                    borderLine = new Pen(color, (float)borderWidths["left"]);
-                    canvas.DrawLine(borderLine, x, y, x, y + height);
-
-                    // right border
-                    borderLine = new Pen(color, (float)borderWidths["right"]);
-                    canvas.DrawLine(borderLine, x + width, y, x + width, y + height);
-                }
-            }
+            Collage collage = new Collage(shuffleList(currentPics.Values.ToList()), CollagePreferences.size, CollagePreferences.orientation, CollagePreferences.borderWidth, CollagePreferences.borderColor);
+            Bitmap newCollage = collage.CreateCollage();
             return newCollage;
         }
 
-        private BinaryNode createTree()
-        {
-            var root = new BinaryNode();
-            List<String> images = currentPics.Values.ToList();
-            images = shuffleList(images);
-
-            // contains path, width, height, and ratio
-            var imagesInfo = new List<Dictionary<string, string>>();
-
-            // already created the root node so (count -1)
-            for (var i = 0; i < images.Count - 1; i++)
-            {
-                // we only want full trees so add 2 nodes at a time
-                root.addNode();
-                root.addNode();
-            }
-
-            root.setAllNodeSplits();
-
-            // set user specified orientation (split) if necessary
-            if (CollagePreferences.orientation != CollagePreferences.Orientation.B)
-            {
-                // Orientation.V = Split.H
-                // Orientation.H = Split.V
-                if(CollagePreferences.orientation == CollagePreferences.Orientation.V)
-                {
-                    root.Split1 = BinaryNode.Split.H;
-                }
-                else
-                {
-                    root.Split1 = BinaryNode.Split.V;
-                }
-            }
-
-            for (var i = 0; i < images.Count; i++)
-            {
-                // set image info
-                Image image = Image.FromFile(images[i]);
-                var width = image.Width;
-                var height = image.Height;
-                double aspectRatio = (double)width / (double)height;
-                var imageInfo = new Dictionary<string, string>();
-                imageInfo.Add("path", images[i]);
-                imageInfo.Add("width", width.ToString());
-                imageInfo.Add("height", height.ToString());
-                imageInfo.Add("ratio", aspectRatio.ToString());
-                imagesInfo.Add(imageInfo);
-            }
-
-            root.setAllImages(imagesInfo);
-            root.setAllAspectRatios();
-
-            int collageSize = CollagePreferences.size;
-            // aspectRatio = w / h;
-            // w = h * aspectRatio;
-            // h = w / aspectRatio;
-            if (root.AspectRatio > 1)
-            {
-                // LANDSCAPE
-                root.Width = collageSize;
-                root.Height = (int)Math.Round(root.Width / root.AspectRatio, 0);
-            }
-            else
-            {
-                // PORTRAIT
-                root.Height = collageSize;
-                root.Width = (int)Math.Round(root.Height * root.AspectRatio, 0);
-            }
-
-            root.setAllDimensionsAndPositions();
-
-            return root;
-        }
 
         public static int getNumImagesInDir(String path)
         {
@@ -511,53 +398,6 @@ namespace AutoCollage
             CollagePreferences.saveDir = saveDir.FullName;
             return saveDir;
         }
-
-        private Dictionary<String, double> determineBorderWidth(Dictionary<String, String> imageInfo)
-        {
-            var borderSizes = new Dictionary<String, double>();
-            int borderWidth = CollagePreferences.borderWidth;
-            int collageHeight = Convert.ToInt32(imageInfo["collageHeight"]);
-            int collageWidth = Convert.ToInt32(imageInfo["collageWidth"]);
-            int x = Convert.ToInt32(imageInfo["x"]);
-            int y = Convert.ToInt32(imageInfo["y"]);
-            int width = Convert.ToInt32(imageInfo["width"]);
-            int height = Convert.ToInt32(imageInfo["height"]);
-
-            // if a side is external, full border width
-            // otherwise, half the border width since it's sharing a border with another image
-            double top = isTopExternal(y) ? borderWidth : (double)borderWidth / (double)2;
-            double bottom = isBottomExternal(collageHeight, y, height) ? borderWidth : (double)borderWidth / (double)2;
-            double left = isLeftExternal(collageWidth, x) ? borderWidth : (double)borderWidth / (double)2;
-            double right = isRightExternal(collageWidth, x, width) ? borderWidth : (double)borderWidth / (double)2;
-
-            borderSizes.Add("top", top);
-            borderSizes.Add("bottom", bottom);
-            borderSizes.Add("left", left);
-            borderSizes.Add("right", right);
-            return borderSizes;
-        }
-
-        private bool isTopExternal(int y)
-        {
-            return y == 0;
-        }
-
-        private bool isBottomExternal(int collageHeight, int y, int height)
-        {
-            return (y + height) == collageHeight;
-        }
-
-        private bool isLeftExternal(int collageWidth, int x)
-        {
-            return x == 0;
-        }
-
-        private bool isRightExternal(int collageWidth, int x, int width)
-        {
-            return (x + width) == collageWidth;
-        }
-
-
 
     }
 }

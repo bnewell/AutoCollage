@@ -81,10 +81,10 @@ namespace AutoCollage
             }
             //
             // ORIENTATION
-            if(CollagePreferences.orientation == CollagePreferences.Orientation.V)
+            if(CollagePreferences.orientation == Orientation.Vertical)
             {
                 orientationVRadio.Checked = true;
-            } else if(CollagePreferences.orientation == CollagePreferences.Orientation.H)
+            } else if(CollagePreferences.orientation == Orientation.Horizontal)
             {
                 orientationHRadio.Checked = true;
             }
@@ -239,17 +239,17 @@ namespace AutoCollage
 
         private void orientationBothRadio_CheckedChanged(object sender, EventArgs e)
         {
-            CollagePreferences.orientation = CollagePreferences.Orientation.B;
+            CollagePreferences.orientation = Orientation.Both;
         }
 
         private void orientationHRadio_CheckedChanged(object sender, EventArgs e)
         {
-            CollagePreferences.orientation = CollagePreferences.Orientation.H;
+            CollagePreferences.orientation = Orientation.Horizontal;
         }
 
         private void orientationVRadio_CheckedChanged(object sender, EventArgs e)
         {
-            CollagePreferences.orientation = CollagePreferences.Orientation.V;
+            CollagePreferences.orientation = Orientation.Vertical;
         }
 
         private void customSizeBox_ValueChanged(object sender, EventArgs e)

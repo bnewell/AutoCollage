@@ -8,7 +8,7 @@ using System.Windows.Forms;
 
 namespace AutoCollage
 {
-    public static class CollagePreferences
+    static class CollagePreferences
     {
         public static int size = 1000;
         public static int count = 5;
@@ -18,7 +18,6 @@ namespace AutoCollage
 
         // Orientation.H = Split.V
         // Orientation.V = Split.H
-        public enum Orientation { H, V, B};
-        public static Orientation orientation = Orientation.B;
+        public static Orientation orientation = Orientation.Both;
     }
 }
