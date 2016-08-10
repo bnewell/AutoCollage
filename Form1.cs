@@ -17,6 +17,7 @@ namespace AutoCollage
         // [pic name, path]
         private Dictionary<String, String> currentPics = new Dictionary<String, String>();
         private static Random random = new Random();
+        private readonly int MAX_ATTEMPTS_TO_CREATE_UNIQUE_COLLAGE = 12;
 
         public Form1()
         {
@@ -289,7 +290,7 @@ namespace AutoCollage
                 {
                     attemptsToCreateUniqueCollage++;
                     Console.WriteLine("attempt: {0}", attemptsToCreateUniqueCollage);
-                    if (attemptsToCreateUniqueCollage == 10)
+                    if (attemptsToCreateUniqueCollage == MAX_ATTEMPTS_TO_CREATE_UNIQUE_COLLAGE)
                     {
                         break;
                     }

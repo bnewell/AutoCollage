@@ -27,7 +27,6 @@ namespace AutoCollage
             size = new Size(0, 0);
             aspectRatio = 0.0;
             assignedSplit = Split.None;
-
         }
 
         /// <summary>
@@ -55,6 +54,11 @@ namespace AutoCollage
                 nodeQueue.Enqueue(currentNode.rightChild);
                 currentNode = nodeQueue.Dequeue();
             }
+        }
+
+        public Boolean IsLeaf()
+        {
+            return this.leftChild == null && this.rightChild == null ? true : false;
         }
     }
 }

@@ -23,8 +23,8 @@ namespace AutoCollage
         private int borderWidth;
         private Color borderColor;
 
-        private Random random;
-
+        private Random random = new Random();
+        private int numImagesAssignedToNodes = 0;
 
         public Collage(List<String> imagePaths, int collageLength, Orientation collageOrientation, int borderWidth, Color borderColor)
         {
@@ -33,12 +33,10 @@ namespace AutoCollage
             this.collageOrientation = collageOrientation;
             this.borderWidth = borderWidth;
             this.borderColor = borderColor;
-            random = new Random();
-            SetCollageSplit();
         }
 
 
-        private List<Image> convertPathsToImages(List<String> pathsToImages)
+        private static List<Image> convertPathsToImages(List<String> pathsToImages)
         {
             List<Image> listOfImages = new List<Image>();
             foreach (String image in pathsToImages)
@@ -50,7 +48,7 @@ namespace AutoCollage
                 }
                 catch (Exception e)
                 {
-
+                    Console.Write("[-] Unable to convert path \"" + image + "\" to image.\nException: "  + e);
                 }
                 if (theImage != null)
                 {
@@ -58,27 +56,6 @@ namespace AutoCollage
                 }
             }
             return listOfImages;
-        }
-
-
-        private void SetCollageSplit()
-        {
-            // set collage orientation
-            if (collageOrientation != Orientation.Both)
-            {
-                // Orientation.V = Split.H
-                // Orientation.H = Split.V
-                root.assignedSplit = collageOrientation == Orientation.Vertical ? Split.Horizontal : Split.Vertical;
-            } else
-            {
-                root.assignedSplit = GetRandomSplit();
-            }
-        }
-
-
-        private Split GetRandomSplit()
-        {
-            return random.Next(2) == 0 ? Split.Horizontal : Split.Vertical;
         }
 
 
@@ -90,9 +67,8 @@ namespace AutoCollage
             var canvas = Graphics.FromImage(newCollage);
 
             // add individual images to new collage
-            for (int i = 0; i < imageInformation.Count; i++)
+            foreach(ImageDetails image in imageInformation)
             {
-                ImageDetails image = imageInformation[i];
                 int x = image.coordinates.X;
                 int y = image.coordinates.Y;
                 int width = image.size.Width;
@@ -105,52 +81,103 @@ namespace AutoCollage
         }
 
 
+        /// <summary>
+        /// Get border size for each image.
+        //  If a side is external, use the full "border width".
+        //  Otherwise, half the border since it's sharing a border with another image.
+        /// </summary>
         private Graphics drawBorderOnCanvas(Graphics canvas, ImageDetails image, int x, int y, int width, int height)
         {
-            // get border size for each image
-            // if a side is external, full "border width"
-            // otherwise half the border, since it's sharing a border with another image
-            Dictionary<String, double> borderWidths = determineBorderWidth(image);
-            var color = CollagePreferences.borderColor;
+            if (CollagePreferences.borderWidth > 0)
+            {
+                Dictionary<String, double> borderWidths = determineBorderWidth(image);
+                var color = CollagePreferences.borderColor;
 
-            // top border
-            Pen borderLine = new Pen(color, (float)borderWidths["top"]);
-            canvas.DrawLine(borderLine, x, y, x + width, y);
+                // top border
+                Pen borderLine = new Pen(color, (float)borderWidths["top"]);
+                canvas.DrawLine(borderLine, x, y, x + width, y);
 
-            // bottom border
-            borderLine = new Pen(color, (float)borderWidths["bottom"]);
-            canvas.DrawLine(borderLine, x, y + height, x + width, y + height);
+                // bottom border
+                borderLine = new Pen(color, (float)borderWidths["bottom"]);
+                canvas.DrawLine(borderLine, x, y + height, x + width, y + height);
 
-            // left border
-            borderLine = new Pen(color, (float)borderWidths["left"]);
-            canvas.DrawLine(borderLine, x, y, x, y + height);
+                // left border
+                borderLine = new Pen(color, (float)borderWidths["left"]);
+                canvas.DrawLine(borderLine, x, y, x, y + height);
 
-            // right border
-            borderLine = new Pen(color, (float)borderWidths["right"]);
-            canvas.DrawLine(borderLine, x + width, y, x + width, y + height);
-
+                // right border
+                borderLine = new Pen(color, (float)borderWidths["right"]);
+                canvas.DrawLine(borderLine, x + width, y, x + width, y + height);
+            }
             return canvas;
         }
 
 
         private void CreateCollageTree()
         {
+
+            SetCollageSplit();
             InitializeFullBinaryTree();
-            SetNodeSplits();
-            SetImagesToLeafNodes();
-            SetAspectRatios();
+
+            VisitTree(node =>
+            {
+                SetNodeSplit(node);
+                SetImageToLeafNode(node);
+            });
+
+            VisitTree(node =>
+            {
+                SetAspectRatio(node);
+            });
+
             SetFinalCollageSize();
-            SetNewImageSizes();
-            SetImageCoordinates();
-            GetImageDetailsFromTree();
+
+            VisitTree(node =>
+            {
+                SetNewImageSize(node);
+            });
+
+            VisitTree(node =>
+            {
+                SetImageCoordinate(node);
+            });
+
+            VisitTree(node =>
+            {
+                GetImageDetailsFromTree(node);
+            });
+
         }
 
 
+        private void SetCollageSplit()
+        {
+            if (collageOrientation != Orientation.Both)
+            {
+                // Orientation.Vertical = Split.Horizontal
+                // Orientation.Horizontal = Split.Vertical
+                root.assignedSplit = collageOrientation == Orientation.Vertical ? Split.Horizontal : Split.Vertical;
+            }
+            else
+            {
+                root.assignedSplit = GetRandomSplit();
+            }
+        }
+
+
+        private Split GetRandomSplit()
+        {
+            return random.Next(2) == 0 ? Split.Horizontal : Split.Vertical;
+        }
+
+
+        /// <summary>
+        /// Create collage tree. It needs to be a full binary tree,
+        /// so add 2 nodes for every one image. Also subtract one from
+        /// image count because the root node has already been created.
+        /// </summary>
         private void InitializeFullBinaryTree()
         {
-            // Create collage tree. It needs to be a full binary tree
-            // so add 2 nodes for every one image. Also images.Count -1
-            // because the root node has already been created;
             for (int i = 0; i < images.Count - 1; i++)
             {
                 root.addNode();
@@ -159,30 +186,40 @@ namespace AutoCollage
         }
 
 
-        /// <summary>
-        /// Assign inner nodes a 'Vertical' or 'Horizontal' split at random (50/50 chance)
-        /// </summary>
-        private void SetNodeSplits()
+        public void VisitTree(Action<BinaryNode> processNode)
         {
+            if (processNode == null)
+            {
+                throw new ArgumentNullException("revivor");
+            }
+
             var currentNode = root;
             var nodeQueue = new Queue<BinaryNode>();
 
             while (currentNode != null)
             {
-                if (currentNode.leftChild != null)
+                if (!currentNode.IsLeaf())
                 {
-                    // inner node
                     nodeQueue.Enqueue(currentNode.leftChild);
                     nodeQueue.Enqueue(currentNode.rightChild);
-
-                    // only set split if it doesn't have one
-                    if (currentNode.assignedSplit == Split.None)
-                    {
-                        currentNode.assignedSplit = GetRandomSplit();
-                    }
                 }
+                processNode(currentNode);
+                currentNode = nodeQueue.Any() ? nodeQueue.Dequeue() : null;
+            }
+        }
 
-                currentNode = nodeQueue.Count > 0 ? nodeQueue.Dequeue() : null;
+
+        /// <summary>
+        /// Assign inner nodes a 'Vertical' or 'Horizontal' split at random (50/50 chance)
+        /// </summary>
+        private void SetNodeSplit(BinaryNode node)
+        {
+            if (!node.IsLeaf())
+            {
+                if (node.assignedSplit == Split.None)
+                {
+                    node.assignedSplit = GetRandomSplit();
+                }
             }
         }
 
@@ -190,34 +227,16 @@ namespace AutoCollage
         /// <summary>
         /// Assign images and aspect ratios to all leaf nodes
         /// </summary>
-        /// <param name="imagesInfo">A list of dictionaries that contain the path, 
-        /// width, height, and apsect ratio of all images</param>
-        private void SetImagesToLeafNodes()
+        private void SetImageToLeafNode(BinaryNode node)
         {
-            var currentNode = root;
-            var nodeQueue = new Queue<BinaryNode>();
-            var imageIndex = 0;
-
-            while (currentNode != null)
+            if (node.IsLeaf())
             {
-                if (currentNode.leftChild != null)
+                if (numImagesAssignedToNodes < images.Count)
                 {
-                    nodeQueue.Enqueue(currentNode.leftChild);
-                    nodeQueue.Enqueue(currentNode.rightChild);
+                    Image image = images[numImagesAssignedToNodes++];
+                    node.image = image;
+                    node.aspectRatio = (float)image.Width / (float)image.Height;
                 }
-                else
-                {
-                    // It's a leaf node, so assign an image to it.
-                    if (imageIndex < images.Count)
-                    {
-                        Image image = images[imageIndex];
-                        currentNode.image = image;
-                        currentNode.aspectRatio = (float)image.Width / (float)image.Height;
-                        imageIndex++;
-                    }
-                }
-
-                currentNode = nodeQueue.Count > 0 ? nodeQueue.Dequeue() : null;
             }
         }
 
@@ -225,23 +244,9 @@ namespace AutoCollage
         /// <summary>
         /// Set aspect ratios of all nodes in the tree
         /// </summary>
-        private void SetAspectRatios()
+        private void SetAspectRatio(BinaryNode node)
         {
-            var currentNode = root;
-            var nodeQueue = new Queue<BinaryNode>();
-
-            while (currentNode != null)
-            {
-                if (currentNode.leftChild != null)
-                {
-                    nodeQueue.Enqueue(currentNode.leftChild);
-                    nodeQueue.Enqueue(currentNode.rightChild);
-                }
-
-                currentNode.aspectRatio = CalculateAspectRatio(currentNode);
-                currentNode = nodeQueue.Count > 0 ? nodeQueue.Dequeue() : null;
-            }
-
+            node.aspectRatio = CalculateAspectRatio(node);
         }
 
 
@@ -254,9 +259,8 @@ namespace AutoCollage
             var currentNode = node;
             var aspectRatio = 0.0;
 
-            if (currentNode.leftChild != null)
+            if (!currentNode.IsLeaf())
             {
-                // inner node
                 var aspectRatioLeft = CalculateAspectRatio(currentNode.leftChild);
                 var aspectRatioRight = CalculateAspectRatio(currentNode.rightChild);
 
@@ -279,54 +283,12 @@ namespace AutoCollage
             return aspectRatio;
         }
 
-
-        private void SetFinalCollageSize()
-        {
-            // Depending on the orientation, the initial "size" of the collage
-            // will specify either the vertical or horizontal pixels. We must calculate
-            // the other dimension using the aspect ratio simple algebra expressions.
-
-            // aspectRatio = w / h;
-            // w = h * aspectRatio;
-            // h = w / aspectRatio;
-            var width = 0;
-            var height = 0;
-            if (root.aspectRatio > 1)
-            {
-                // LANDSCAPE
-                width = collageLength;
-                height = (int)Math.Round(width / root.aspectRatio, 0);
-            }
-            else
-            {
-                // PORTRAIT
-                height = collageLength;
-                width = (int)Math.Round(height * root.aspectRatio, 0);
-            }
-
-            finalCollageSize = new Size(width, height);
-        }
-
-
         /// <summary>
         /// Set image sizes for all nodes in the tre
         /// </summary>
-        private void SetNewImageSizes()
+        private void SetNewImageSize(BinaryNode node)
         {
-            var currentNode = root;
-            var nodeQueue = new Queue<BinaryNode>();
-
-            while (currentNode != null)
-            {
-                if (currentNode.leftChild != null)
-                {
-                    nodeQueue.Enqueue(currentNode.leftChild);
-                    nodeQueue.Enqueue(currentNode.rightChild);
-                }
-
-                currentNode.size = CalculateNewImageSize(currentNode);
-                currentNode = nodeQueue.Count > 0 ? nodeQueue.Dequeue() : null;
-            }
+            node.size = CalculateNewImageSize(node);
         }
 
 
@@ -368,23 +330,9 @@ namespace AutoCollage
         /// <summary>
         /// Set coordinates for all nodes in the tree.
         /// </summary>
-        private void SetImageCoordinates()
+        private void SetImageCoordinate(BinaryNode node)
         {
-            var currentNode = root;
-            var nodeQueue = new Queue<BinaryNode>();
-
-            // breadth-first
-            while (currentNode != null)
-            {
-                if (currentNode.leftChild != null)
-                {
-                    nodeQueue.Enqueue(currentNode.leftChild);
-                    nodeQueue.Enqueue(currentNode.rightChild);
-                }
-
-                currentNode.coordinates = CalculateImageCoordinates(currentNode);
-                currentNode = nodeQueue.Count > 0 ? nodeQueue.Dequeue() : null;
-            }
+            node.coordinates = CalculateImageCoordinates(node);
         }
 
 
@@ -407,7 +355,6 @@ namespace AutoCollage
                 return new Point(x, y);
             }
 
-            // calculate coordinates
             if (current == parent.leftChild)
             {
                 // left child always goes first and gets parent's coordinates
@@ -433,24 +380,39 @@ namespace AutoCollage
         }
 
 
-        private void GetImageDetailsFromTree()
+        private void SetFinalCollageSize()
         {
-            var currentNode = root;
-            var nodeQueue = new Queue<BinaryNode>();
-
-            while (currentNode != null)
+            // Depending on the orientation, the initial "size" of the collage
+            // will specify either the vertical or horizontal pixels. We must calculate
+            // the other dimension using the aspect ratio and simple algebra equations.
+            //
+            // aspectRatio = w / h;
+            // w = h * aspectRatio;
+            // h = w / aspectRatio;
+            var width = 0;
+            var height = 0;
+            if (root.aspectRatio > 1)
             {
-                if (currentNode.leftChild != null)
-                {
-                    nodeQueue.Enqueue(currentNode.leftChild);
-                    nodeQueue.Enqueue(currentNode.rightChild);
-                }
-                else
-                {
-                    imageInformation.Add(new ImageDetails(currentNode.image, currentNode.coordinates, currentNode.size));
-                }
+                // LANDSCAPE
+                width = collageLength;
+                height = (int)Math.Round(width / root.aspectRatio, 0);
+            }
+            else
+            {
+                // PORTRAIT
+                height = collageLength;
+                width = (int)Math.Round(height * root.aspectRatio, 0);
+            }
 
-                currentNode = nodeQueue.Count > 0 ? nodeQueue.Dequeue() : null;
+            finalCollageSize = new Size(width, height);
+        }
+
+
+        private void GetImageDetailsFromTree(BinaryNode node)
+        {
+            if (node.IsLeaf())
+            {
+                imageInformation.Add(new ImageDetails(node.image, node.coordinates, node.size));
             }
         }
 
@@ -458,9 +420,8 @@ namespace AutoCollage
         private Dictionary<String, double> determineBorderWidth(ImageDetails image)
         {
             var borderSizes = new Dictionary<String, double>();
-            int borderWidth = CollagePreferences.borderWidth;
-            int collageHeight = Convert.ToInt32(finalCollageSize.Height);
-            int collageWidth = Convert.ToInt32(finalCollageSize.Width);
+            int collageHeight = finalCollageSize.Height;
+            int collageWidth = finalCollageSize.Width;
             int x = image.coordinates.X;
             int y = image.coordinates.Y;
             int width = image.size.Width;
